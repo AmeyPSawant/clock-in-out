@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Time clock</title>
+<style>
+:root{--bg:#f4f5f6;--ink:#14171a;--muted:#6b7280;--on:#2f7d5b;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1113;--ink:#eceef0;--muted:#8a9099;--on:#5fbf92}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:440px;min-height:100dvh;margin:0 auto;padding:max(28px,env(safe-area-inset-top)) 20px max(24px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px}
+#clock{display:block;font-size:4.5rem;font-weight:300;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+#status{margin:12px 0 16px;min-height:2.8em;color:var(--muted)}
+#status.on::before{content:"";display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:50%;background:var(--on)}
+button{flex:1;min-height:140px;border:2px solid var(--ink);border-radius:20px;background:transparent;color:var(--ink);font:inherit;font-size:1.5rem;font-weight:500;cursor:pointer}
+#in{background:var(--ink);color:var(--bg)}
+button:active:not(:disabled){transform:scale(.985)}
+button:disabled{opacity:.3;cursor:default}
+button:focus-visible{outline:3px solid var(--on);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){button:active{transform:none}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <time id="clock"></time>
+    <p id="status" aria-live="polite"></p>
+  </header>
+  <button id="in">Clock in</button>
+  <button id="out">Clock out</button>
+</main>
+<script>
+const API = 'PASTE_WEB_APP_URL_HERE'; // Apps Script web app URL (see README)
+
+const $ = id => document.getElementById(id);
+const fmt = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+  del: k => { try { localStorage.removeItem(k); } catch (e) {} }
+};
+
+function tick() { $('clock').textContent = fmt(Date.now()); }
+tick(); setInterval(tick, 1000);
+
+function show(msg, on) { const s = $('status'); s.textContent = msg; s.className = on ? 'on' : ''; }
+function setState(state) { $('in').disabled = state === 'in'; $('out').disabled = state === 'out'; }
+
+function apply(r) {
+  if (r.state === 'in') {
+    setState('in'); show('Clocked in since ' + fmt(r.since), true);
+  } else if (r.state === 'out') {
+    setState('out');
+    show(r.hours != null ? 'Clocked out at ' + fmt(r.at) + '. Shift: ' + r.hours + ' hours.' : 'Not clocked in');
+  } else {
+    if (r.error === 'Wrong PIN') store.del('pin');
+    setState(''); show(r.error === 'Wrong PIN' ? 'Wrong PIN. Tap a button to try again.' : (r.error || 'Something went wrong'));
+  }
+}
+
+function ready() {
+  if (API.includes('PASTE')) { show('Add your web app URL to index.html first.'); return false; }
+  return true;
+}
+
+async function send(action) {
+  if (!ready()) return;
+  let pin = store.get('pin');
+  if (!pin) { pin = prompt('Enter your PIN'); if (!pin) return; store.set('pin', pin); }
+  $('in').disabled = $('out').disabled = true;
+  show('Saving…');
+  try {
+    const res = await fetch(API, { method: 'POST', body: JSON.stringify({ action, pin }) });
+    apply(await res.json());
+  } catch (e) {
+    setState(''); show('Could not reach the sheet. Check your connection and try again.');
+  }
+}
+
+async function load() {
+  if (!ready()) return;
+  const pin = store.get('pin');
+  if (!pin) return show('Tap a button to start.');
+  try {
+    const res = await fetch(API + '?pin=' + encodeURIComponent(pin));
+    apply(await res.json());
+  } catch (e) { show('Could not reach the sheet.'); }
+}
+
+$('in').onclick = () => send('in');
+$('out').onclick = () => send('out');
+load();
+</script>
+</body>
+</html>
