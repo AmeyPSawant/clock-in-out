@@ -1,5 +1,7 @@
 # Clock in / clock out
 
+Website - [Click Here](https://ameypsawant.github.io/clock-in-out/)
+
 A two-button time clock that logs to a Google Sheet (`Timesheet` tab). Built for shifts that cross midnight, such as 11 PM to 7 AM.
 
 ## Setup
